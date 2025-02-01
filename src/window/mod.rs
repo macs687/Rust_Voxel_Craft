@@ -1,6 +1,8 @@
-mod events;
+pub mod events;
 
 extern crate gl;
+
+use gl::DEPTH_BUFFER_BIT;
 use gl::types::*;
 
 extern crate glfw;
@@ -59,6 +61,16 @@ impl Window {
 
     pub fn poll_events(&mut self){
         self.glfw.poll_events();
+    }
+
+    pub fn gl_clear(&mut self){
+        unsafe {
+            gl::Clear(gl::COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
+        }
+    }
+
+    pub fn clear_color(&mut self, red: f32, green: f32, blue: f32, alpha: f32){
+        unsafe { gl::ClearColor(red, green, blue, alpha) }
     }
 
 }
