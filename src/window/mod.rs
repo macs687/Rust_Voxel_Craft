@@ -1,4 +1,6 @@
 pub mod events;
+mod camera;
+pub use camera::Camera;
 
 extern crate gl;
 
@@ -12,7 +14,8 @@ use glfw::ffi::{glfwTerminate};
 pub struct Window{
     pub glfw: Glfw,
     pub window: PWindow,
-    pub receiver: GlfwReceiver<(f64, WindowEvent)>
+    pub receiver: GlfwReceiver<(f64, WindowEvent)>,
+
 }
 
 
@@ -73,4 +76,11 @@ impl Window {
         unsafe { gl::ClearColor(red, green, blue, alpha) }
     }
 
+    pub fn width(&self) -> i32{
+        self.window.get_size().0
+    }
+
+    pub fn height(&self) -> i32{
+        self.window.get_size().1
+    }
 }
