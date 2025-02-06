@@ -2,10 +2,9 @@ use settings::*;
 use math::*;
 
 use window::{Window, Events, Camera};
-use graphics::{load_shader, mesh::Mesh};
+use graphics::{load_shader, VoxelRenderer};
 use loaders::{load_texture};
-/// Voxel_renderer
-//use voxels::{Chunk};
+use voxels::{Chunk};
 
 
 mod window;
@@ -43,9 +42,11 @@ fn main() {
 
     let texture = load_texture("res/block.png").expect("Failed to load texture");
 
-    //let chunk = Chunk::new();
+    let mut renderer = VoxelRenderer::new(1024*1024*8);
 
-    let mesh = Mesh::new(VERTICES.as_ptr(), 6, attrs.as_ptr());
+    let chunk = Chunk::new();
+
+    let mesh = renderer.render(&chunk);
 
     window.clear_color(1.0, 1.0, 1.0, 1.0);
 
@@ -85,37 +86,30 @@ fn main() {
         }
 
         if events.pressed(Q){
-            println!("Нажата Q ");
             camera.position.z += _delta as f32 * speed;
         }
 
         if events.pressed(E){
-            println!("Нажата E ");
             camera.position.z -= _delta as f32 * speed;
         }
 
         if events.pressed(A){
-            println!("Нажата A ");
             camera.position -= camera.right * _delta as f32 * speed;
         }
 
         if events.pressed(D){
-            println!("Нажата D ");
             camera.position += camera.right * _delta as f32 * speed;
         }
 
         if events.pressed(S){
-            println!("Нажата S ");
             camera.position -= camera.up * _delta as f32 * speed;
         }
 
         if events.pressed(W){
-            println!("Нажата W ");
             camera.position += camera.up * _delta as f32 * speed;
         }
 
         if events.jpressed(TAB){
-            println!("Нажата TAB");
             window.window.set_cursor_mode(events.toggle_cursor());
         }
 
@@ -123,8 +117,8 @@ fn main() {
             cam_y += -events.delta_y / (window.height() as f32) * 2.0;
             cam_x += -events.delta_x / (window.height() as f32) * 2.0;
 
-             if cam_y < -89.0_f32.to_radians() {   // ????
-                 cam_y = -89.0_f32.to_radians();
+             if cam_y < -90.0_f32.to_radians() {   // ????
+                 cam_y = -90.0_f32.to_radians();
              }
              if cam_y > 89.0_f32.to_radians() {
                  cam_y = 89.0_f32.to_radians();

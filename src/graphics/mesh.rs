@@ -1,5 +1,4 @@
 use gl::types::*;
-use std::mem;
 
 pub struct Mesh {
     vao: GLuint,
@@ -26,7 +25,7 @@ impl Mesh {
 
             gl::BindVertexArray(vao);
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::BufferData(gl::ARRAY_BUFFER, (std::mem::size_of::<f32>() * _vertex_size * vertices) as GLsizeiptr, buffer as *const std::ffi::c_void, gl::STATIC_DRAW);
+            gl::BufferData(gl::ARRAY_BUFFER, (size_of::<f32>() * _vertex_size * vertices) as GLsizeiptr, buffer as *const std::ffi::c_void, gl::STATIC_DRAW);
 
             let mut offset = 0;
             let mut i = 0;
@@ -37,8 +36,8 @@ impl Mesh {
                     size,
                     gl::FLOAT,
                     gl::FALSE,
-                    (_vertex_size * mem::size_of::<f32>()) as GLint,
-                    (offset * std::mem::size_of::<f32>()) as *const std::ffi::c_void,
+                    (_vertex_size * size_of::<f32>()) as GLint,
+                    (offset * size_of::<f32>()) as *const std::ffi::c_void,
                 );
                 gl::EnableVertexAttribArray(i as GLuint);
                 offset += size as usize;
