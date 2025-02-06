@@ -1,18 +1,19 @@
-use std::mem;
-use gl::TRIANGLES;
-use gl::types::{GLfloat, GLint, GLsizeiptr, GLuint};
-use glfw::ffi::{KEY_A, KEY_D, KEY_E, KEY_ESCAPE, KEY_Q, KEY_S, KEY_TAB, KEY_W, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT};
-use window::{events::Events, Window, Camera};
-use graphics::load_shader;
-use loaders::{png_loading};
-use crate::loaders::png_loading::load_texture;
-use glam::*;
-use glfw::*;
+use settings::*;
+use math::*;
+
+use window::{Window, Events, Camera};
+use graphics::{load_shader, mesh::Mesh};
+use loaders::{load_texture};
+/// Voxel_renderer
+//use voxels::{Chunk};
+
 
 mod window;
 mod graphics;
 mod loaders;
-
+mod voxels;
+mod settings;
+mod math;
 
 const VERTICES: [f32; 30] = [
     -1.0f32, -1.0f32, 0.0f32, 0.0f32, 0.0f32,
@@ -29,48 +30,7 @@ const HEIGHT: u32 = 720;
 const TITLE: &str = "Voxel_Craft";
 
 #[allow(non_upper_case_globals)]
-const attrss: [i32; 2] = [2, 0];
-
-
-// pub fn new(buffer: *const f32, vertices: usize, attrs: *const i32) {
-//     let mut _vertex_size = 0;
-//     let mut i = 0;
-//     while unsafe { *attrs.offset(i) } != 0 {
-//         _vertex_size += unsafe { *attrs.offset(i) as usize };
-//         i += 1;
-//     }
-//
-//     let mut vao = 0;
-//     let mut vbo = 0;
-//     unsafe {
-//         gl::GenVertexArrays(1, &mut vao);
-//         gl::GenBuffers(1, &mut vbo);
-//
-//         gl::BindVertexArray(vao);
-//         gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-//         gl::BufferData(gl::ARRAY_BUFFER, (std::mem::size_of::<f32>() * _vertex_size * vertices) as GLsizeiptr, buffer as *const std::ffi::c_void, gl::STATIC_DRAW, );
-//
-//         let mut offset = 0;
-//         let mut i = 0;
-//         while *attrs.offset(i) != 0 {
-//             let size = *attrs.offset(i) as GLint;
-//             gl::VertexAttribPointer(
-//                 i as GLuint,
-//                 size,
-//                 gl::FLOAT,
-//                 gl::FALSE,
-//                 (_vertex_size * std::mem::size_of::<f32>()) as GLint,
-//                 (offset * std::mem::size_of::<f32>()) as *const std::ffi::c_void,
-//             );
-//             gl::EnableVertexAttribArray(i as GLuint);
-//             offset += size as usize;
-//             i += 1;
-//         }
-//
-//         gl::BindVertexArray(0);
-//     }
-// }
-
+const attrs: [i32; 3] = [3, 2, 0];
 
 
 fn main() {
@@ -81,82 +41,19 @@ fn main() {
 
     let shader = load_shader("res/main.glslv","res/main.glslf").expect("Failed to load shader");
 
-    let texture = load_texture("res/img.png").expect("Failed to load texture");
+    let texture = load_texture("res/block.png").expect("Failed to load texture");
 
+    //let chunk = Chunk::new();
 
-    //new(VERTICES.as_ptr(), 6, attrss.as_ptr());
-
-    let mut _vertex_size = 0;
-    let mut i = 0;
-    while unsafe { *attrss.as_ptr().offset(i) } != 0 {
-        _vertex_size += unsafe { *attrss.as_ptr().offset(i) as usize };
-        i += 1;
-    }
-
-    let mut vao = 0;
-    let mut vbo = 0;
-    unsafe {
-        gl::GenVertexArrays(1, &mut vao);
-        gl::GenBuffers(1, &mut vbo);
-
-        gl::BindVertexArray(vao);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl::BufferData(gl::ARRAY_BUFFER, (std::mem::size_of::<f32>() * _vertex_size * 6) as GLsizeiptr, VERTICES.as_ptr() as *const std::ffi::c_void, gl::STATIC_DRAW, );
-
-
-
-
-        gl::VertexAttribPointer(
-            0,
-            3,
-            gl::FLOAT,
-            gl::FALSE,
-            (5 * std::mem::size_of::<f32>()) as GLint,
-            (0 * std::mem::size_of::<f32>()) as *const std::ffi::c_void,
-        );
-
-        gl::EnableVertexAttribArray(0);
-
-
-        gl::VertexAttribPointer(
-            1,
-            2,
-            gl::FLOAT,
-            gl::FALSE,
-            (5 * std::mem::size_of::<f32>()) as GLint,
-            (3 * std::mem::size_of::<f32>()) as *const std::ffi::c_void,
-        );
-
-        gl::EnableVertexAttribArray(1);
-
-
-        gl::BindVertexArray(0);
-    }
-
-
+    let mesh = Mesh::new(VERTICES.as_ptr(), 6, attrs.as_ptr());
 
     window.clear_color(1.0, 1.0, 1.0, 1.0);
-    // gl::Enable(DEPTH_TEST);
-    // gl::Enable(gl::CULL_FACE);
-    unsafe {
-        gl::Enable(gl::BLEND);
-        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-    }
 
+    window.setting_gl();
 
     let mut camera = Camera::init(Vec3::new(0.0, 0.0, 1.0), 70.0_f32.to_radians());
 
-
-
-
-
-
-
-
-    let mut model = Mat4::IDENTITY;
-    //model = Mat4::from_scale(glam::vec3(2.0f32, 2.0f32, 2.0f32));
-    //model = Mat4::from_translation(vec3(1.0f32, 1.0f32, 1.0f32));
-
+    let model = Mat4::IDENTITY;
 
     let mut last_time = window.glfw.get_time();
     let mut _delta:f64 = 0.0;
@@ -171,53 +68,53 @@ fn main() {
         _delta = current_time - last_time;
         last_time = current_time;
 
-        if events.jpressed(KEY_ESCAPE) {
+        if events.jpressed(ESCAPE) {
             window.close();
         }
 
-        if events.jclicked(MOUSE_BUTTON_LEFT){
+        if events.jclicked(LCM){
             window.clear_color(0.0, 0.0, 0.0, 0.0);
         }
 
-        if events.jclicked(MOUSE_BUTTON_RIGHT){
+        if events.jclicked(PCM){
             window.clear_color(0.4, 0.8, 0.6, 0.5);
         }
 
-        if events.jclicked(MOUSE_BUTTON_MIDDLE){
+        if events.jclicked(SCM){
             window.clear_color(1.0, 1.0, 1.0, 0.5);
         }
 
-        if events.pressed(KEY_Q){
+        if events.pressed(Q){
             println!("Нажата Q ");
             camera.position.z += _delta as f32 * speed;
         }
 
-        if events.pressed(KEY_E){
+        if events.pressed(E){
             println!("Нажата E ");
             camera.position.z -= _delta as f32 * speed;
         }
 
-        if events.pressed(KEY_A){
+        if events.pressed(A){
             println!("Нажата A ");
             camera.position -= camera.right * _delta as f32 * speed;
         }
 
-        if events.pressed(KEY_D){
+        if events.pressed(D){
             println!("Нажата D ");
             camera.position += camera.right * _delta as f32 * speed;
         }
 
-        if events.pressed(KEY_S){
+        if events.pressed(S){
             println!("Нажата S ");
             camera.position -= camera.up * _delta as f32 * speed;
         }
 
-        if events.pressed(KEY_W){
+        if events.pressed(W){
             println!("Нажата W ");
             camera.position += camera.up * _delta as f32 * speed;
         }
 
-        if events.jpressed(KEY_TAB){
+        if events.jpressed(TAB){
             println!("Нажата TAB");
             window.window.set_cursor_mode(events.toggle_cursor());
         }
@@ -238,25 +135,14 @@ fn main() {
         }
 
 
-        //camera.rotate(events.delta_x / (window.height() as f32), -events.delta_x / (window.height() as f32), 0.0);
-        
-
-
         window.gl_clear();
 
         shader.use_shader();
         shader.uniform_matrix("model", model);
-        shader.uniform_matrix("projview", camera.get_projection(window.width() as f32, window.height() as f32) * camera.get_view());
+        shader.uniform_matrix("preview", camera.get_projection(window.width() as f32, window.height() as f32) * camera.get_view());
         texture.bind();
 
-
-
-
-        unsafe {
-            gl::BindVertexArray(vao);
-            gl::DrawArrays(gl::TRIANGLES, 0, 6);
-            gl::BindVertexArray(0);
-        }
+        mesh.draw(TRIANGLES);
 
 
         window.swap_buffers();
