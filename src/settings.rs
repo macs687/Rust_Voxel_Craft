@@ -3,9 +3,11 @@ use gl::types::GLenum;
 use glfw::ffi::{KEY_A, KEY_D, KEY_E, KEY_ENTER, KEY_ESCAPE, KEY_Q, KEY_S, KEY_TAB, KEY_W, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT};
 
 
-/// тип рендера треугольники
+/// тип рендера: треугольники
 pub const TRIANGLES: GLenum = gl::TRIANGLES;
 
+/// Тип рендера: линии
+pub const LINES: GLenum = gl::LINES;
 
 /// Левая кнопка мыши
 pub const LCM: c_int = MOUSE_BUTTON_LEFT;
