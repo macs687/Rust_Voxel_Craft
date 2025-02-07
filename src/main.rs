@@ -150,6 +150,35 @@ fn main() {
         }
 
 
+        {
+            let mut end = Vec3::ZERO;
+            let mut norm = Vec3::ZERO;
+            let mut iend = Vec3::ZERO;
+
+            if
+            let Some(vox) = chunks.ray_cast(
+                camera.position,
+                camera.front,
+                10.0,
+                &mut end,
+                &mut norm,
+                &mut iend
+            )
+            {
+                if events.jclicked(LCM) {
+                    chunks.set(iend.x as isize, iend.y as isize, iend.z as isize, 0);
+                }
+                if events.jclicked(PCM) {
+                    chunks.set(
+                        (iend.x + norm.x) as isize,
+                        (iend.y + norm.y) as isize,
+                        (iend.z + norm.z) as isize,
+                        2
+                    );
+                }
+            }
+        }
+
         let mut closes: Vec<Option<Chunk>> = vec![None; 27];
 
         for i in 0..chunks.volume {
@@ -161,7 +190,7 @@ fn main() {
             }
             let chunk = &chunks.chunks[i];
 
-            // if let Some(mesh) = meshes[i].take() {
+            // if let Some(mesh) = meshes[i] {
             //     // Освобождаем ресурсы меша
             //     drop(mesh);
             // }
