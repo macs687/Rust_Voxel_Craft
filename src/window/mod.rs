@@ -1,10 +1,11 @@
 pub mod events;
 mod camera;
 pub use camera::Camera;
+pub use events::Events;
 
 extern crate gl;
 
-use gl::DEPTH_BUFFER_BIT;
+use gl::{DEPTH_BUFFER_BIT, DEPTH_TEST};
 use gl::types::*;
 
 extern crate glfw;
@@ -82,5 +83,14 @@ impl Window {
 
     pub fn height(&self) -> i32{
         self.window.get_size().1
+    }
+
+    pub fn setting_gl(&self){
+        unsafe {
+            gl::Enable(DEPTH_TEST);
+            gl::Enable(gl::CULL_FACE);
+            gl::Enable(gl::BLEND);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        }
     }
 }
