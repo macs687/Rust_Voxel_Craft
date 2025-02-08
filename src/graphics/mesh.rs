@@ -55,6 +55,21 @@ impl Mesh {
         }
     }
 
+
+    pub fn reload(&mut self, buffer: *const f32, vertices: usize) {
+        unsafe {
+            gl::BindVertexArray(self.vao);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+            gl::BufferData(
+                gl::ARRAY_BUFFER,
+                (size_of::<f32>() * self._vertex_size * vertices) as GLsizeiptr,
+                buffer as *const std::ffi::c_void,
+                gl::STATIC_DRAW,
+            );
+        }
+        self.vertices = vertices;
+    }
+
     pub fn draw(&self, primitive: GLenum){
         unsafe {
             gl::BindVertexArray(self.vao);

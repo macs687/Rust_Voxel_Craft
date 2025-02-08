@@ -6,6 +6,7 @@ use std::ptr;
 use bytemuck::bytes_of;
 use gl::types::*;
 use glam::{Mat4};
+use anyhow::{Context, Result};
 
 
 pub struct Shader{
@@ -42,14 +43,31 @@ impl Drop for Shader {
 pub fn load_shader(vertex_file: &str, fragment_file: &str) -> Result<Shader, Box<dyn Error>> {
     let mut vertex_code = String::new();
     let mut fragment_code = String::new();
-    let mut v_shader_file = File::open(vertex_file)?;
-    let mut f_shader_file = File::open(fragment_file)?;
 
-    v_shader_file.read_to_string(&mut vertex_code)?;
-    f_shader_file.read_to_string(&mut fragment_code)?;
+    let mut v_shader_file = File::open(vertex_file).map_err(|e| {
+        format!("Failed to open vertex shader file. File not found in '{}': {}", vertex_file, e)
+    })?;
 
-    let v_shader_code = CString::new(vertex_code)?;
-    let f_shader_code = CString::new(fragment_code)?;
+    let mut f_shader_file = File::open(fragment_file).map_err(|e| {
+        format!("Failed to open fragment shader file. File not found in '{}': {}", fragment_file, e)
+    })?;
+
+    v_shader_file.read_to_string(&mut vertex_code).map_err(|e| {
+        format!("Failed to read vertex shader file '{}': {}", vertex_file, e)
+    })?;
+
+    f_shader_file.read_to_string(&mut fragment_code).map_err(|e| {
+        format!("Failed to read fragment shader file '{}': {}", fragment_file, e)
+    })?;
+
+    // Преобразование кода шейдеров в CString
+    let v_shader_code = CString::new(vertex_code).map_err(|e| {
+        format!("Failed to convert vertex shader code to CString: {}", e)
+    })?;
+
+    let f_shader_code = CString::new(fragment_code).map_err(|e| {
+        format!("Failed to convert fragment shader code to CString: {}", e)
+    })?;
 
     let mut success: GLint = 0;
     let mut info_log: [GLchar; 512] = [0; 512];

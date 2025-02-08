@@ -277,4 +277,27 @@ impl Chunks {
         norm.z = 0.0;
         None
     }
+
+
+    pub fn write(&self, dest: &mut [u8]) {
+        let mut index = 0;
+        for chunk in &self.chunks {
+            for voxel in &*chunk.voxels {
+                dest[index] = voxel.id;
+                index += 1;
+            }
+        }
+    }
+
+
+    pub fn read(&mut self, source: &[u8]) {
+        let mut index = 0;
+        for chunk in &mut self.chunks {
+            for voxel in chunk.voxels.iter_mut() {
+                voxel.id = source[index];
+                index += 1;
+            }
+            chunk.modified = true;
+        }
+    }
 }

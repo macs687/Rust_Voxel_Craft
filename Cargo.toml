@@ -10,3 +10,4 @@ image = {version = "*", default-features = false, features = ["png", "rayon"]}
 bytemuck = {version = "*", default-features = false}
 glam = "*"
 noise = "*"
+anyhow = "1.0.95"

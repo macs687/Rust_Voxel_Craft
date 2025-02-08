@@ -79,13 +79,14 @@ pub struct VoxelRenderer {
 }
 
 impl VoxelRenderer {
-    pub fn new(capacity: usize) -> Self {
+    pub fn init(capacity: usize) -> Self {
         Self {
             buffer: Vec::with_capacity(capacity * VERTEX_SIZE * 6),
         }
     }
 
-    pub fn render(&mut self, chunk: &Chunk, chunks: &Vec<Option<Chunk>>) -> Mesh {
+    pub fn render(&mut self, chunk: &Chunk , chunks: &Vec<Option<Chunk>>, ambien_occlusion: bool) -> Mesh {
+        let ao_factor = 0.15;
         self.buffer.clear();
 
         for y in 0_..CHUNK_H {
@@ -99,73 +100,147 @@ impl VoxelRenderer {
                     }
 
                     let uvsize = 1.0 / 16.0;
-                    let u = ((id % 16) as f32) * uvsize;
-                    let v = 1.0 - ((1 + id / 16) as f32) * uvsize;
+                    let u1 = ((id % 16) as f32) * uvsize;
+                    let v1 = 1.0 - ((1 + id / 16) as f32) * uvsize;
+                    let u2 = u1 + uvsize;
+                    let v2 = v1 + uvsize;
+
 
                     let mut l;
+                    // AO values
                     let (x, y, z) = (x as isize, y as isize, z as isize);
+
+                    let (mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h) = (0., 0., 0., 0., 0., 0., 0., 0.);
+
 
                     if !is_blocked(x , y  + 1, z , &chunks) {
                         l = 1.0;
-                        vertex(&mut self.buffer, x as f32 - 0.5, y as f32 + 0.5, z as f32 - 0.5, u + uvsize, v, l);
-                        vertex(&mut self.buffer, x as f32 - 0.5, y as f32 + 0.5, z as f32 + 0.5, u + uvsize, v + uvsize, l);
-                        vertex(&mut self.buffer, x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u, v + uvsize, l);
 
-                        vertex(&mut self.buffer, x as f32 - 0.5, y as f32 + 0.5, z as f32 - 0.5, u + uvsize, v, l);
-                        vertex(&mut self.buffer, x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u, v + uvsize, l);
-                        vertex(&mut self.buffer, x as f32 + 0.5, y as f32 + 0.5, z as f32 - 0.5, u, v, l);
+                        if ambien_occlusion {
+                            a = is_blocked(x +1 , y+1, z, &chunks) as u8 as f32 * ao_factor;
+                            b = is_blocked(x, y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            c = is_blocked(x-1 , y+1, z, &chunks) as u8 as f32* ao_factor;
+                            d = is_blocked(x, y+1, z-1, &chunks) as u8 as f32* ao_factor;
+
+                            e = is_blocked(x -1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                            f = is_blocked(x -1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            g = is_blocked(x +1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            h = is_blocked(x +1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                        }
+
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 - 0.5, u2, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 + 0.5, u2, v2, l*(1.-c-b-f));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u1, v2, l*(1.-a-b-g));
+
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 - 0.5, u2, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u1, v2, l*(1.-a-b-g));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 - 0.5, u1, v1, l*(1.-a-d-h));
                     }
                     if !is_blocked(x,y -1,z, &chunks){
                         l = 0.75;
-                        vertex(&mut self.buffer, x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u, v, l);
-                        vertex(&mut self.buffer, x as f32 + 0.5, y as f32 - 0.5, z as f32 + 0.5, u + uvsize, v + uvsize, l);
-                        vertex(&mut self.buffer, x as f32 - 0.5, y as f32 - 0.5, z as f32 + 0.5, u, v + uvsize, l);
+                        if ambien_occlusion {
+                            a = is_blocked(x +1 , y+1, z, &chunks) as u8 as f32 * ao_factor;
+                            b = is_blocked(x, y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            c = is_blocked(x-1 , y+1, z, &chunks) as u8 as f32* ao_factor;
+                            d = is_blocked(x, y+1, z-1, &chunks) as u8 as f32* ao_factor;
 
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u, v, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 - 0.5, u + uvsize, v, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 + 0.5, u+uvsize, v + uvsize, l);
+                            e = is_blocked(x -1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                            f = is_blocked(x -1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            g = is_blocked(x +1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            h = is_blocked(x +1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                        }
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u1, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 + 0.5, u2, v2, l*(1.-c-b-f));
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 + 0.5, u1, v2, l*(1.-a-b-g));
+
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u1, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 - 0.5, u2, v1, l*(1.-a-b-g));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 + 0.5, u2, v2, l*(1.-a-d-h));
                     }
-
                     if !is_blocked(x+1,y, z, &chunks){
                         l = 0.95;
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 - 0.5, u+uvsize, v, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 - 0.5, u + uvsize, v + uvsize, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u, v + uvsize, l);
+                        if ambien_occlusion {
+                            a = is_blocked(x +1 , y+1, z, &chunks) as u8 as f32 * ao_factor;
+                            b = is_blocked(x, y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            c = is_blocked(x-1 , y+1, z, &chunks) as u8 as f32* ao_factor;
+                            d = is_blocked(x, y+1, z-1, &chunks) as u8 as f32* ao_factor;
 
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 - 0.5, u+uvsize, v, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u, v + uvsize, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 + 0.5, u, v, l);
+                            e = is_blocked(x -1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                            f = is_blocked(x -1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            g = is_blocked(x +1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            h = is_blocked(x +1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                        }
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 - 0.5, u2, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 - 0.5, u2 , v2, l*(1.-c-b-f));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u1, v2 , l*(1.-a-b-g));
+
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 - 0.5, u2, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u1, v2, l*(1.-a-b-g));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 + 0.5, u1, v1, l*(1.-a-d-h));
                     }
                     if !is_blocked(x-1,y,z, &chunks){
                         l = 0.85;
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u, v, l);
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 + 0.5, u+uvsize, v + uvsize, l);
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 - 0.5, u, v+uvsize, l);
+                        if ambien_occlusion {
+                            a = is_blocked(x +1 , y+1, z, &chunks) as u8 as f32 * ao_factor;
+                            b = is_blocked(x, y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            c = is_blocked(x-1 , y+1, z, &chunks) as u8 as f32* ao_factor;
+                            d = is_blocked(x, y+1, z-1, &chunks) as u8 as f32* ao_factor;
 
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u, v, l);
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 + 0.5, u+uvsize, v, l);
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 + 0.5, u+uvsize, v+uvsize, l);
+                            e = is_blocked(x -1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                            f = is_blocked(x -1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            g = is_blocked(x +1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            h = is_blocked(x +1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                        }
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u1, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 + 0.5, u2, v2, l*(1.-c-b-f));
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 - 0.5, u1, v2, l*(1.-a-b-g));
+
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u1, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 + 0.5, u2, v1, l*(1.-a-b-g));
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 + 0.5, u2, v2, l*(1.-a-d-h));
                     }
 
                     if !is_blocked(x,y,z+1, &chunks){
                         l = 0.9;
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 + 0.5, u, v, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u+uvsize, v +uvsize, l);
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 + 0.5, u, v+uvsize, l);
+                        if ambien_occlusion {
+                            a = is_blocked(x +1 , y+1, z, &chunks) as u8 as f32 * ao_factor;
+                            b = is_blocked(x, y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            c = is_blocked(x-1 , y+1, z, &chunks) as u8 as f32* ao_factor;
+                            d = is_blocked(x, y+1, z-1, &chunks) as u8 as f32* ao_factor;
 
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 + 0.5, u, v, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 + 0.5, u+uvsize, v, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u+uvsize, v+uvsize, l);
+                            e = is_blocked(x -1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                            f = is_blocked(x -1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            g = is_blocked(x +1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            h = is_blocked(x +1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                        }
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 + 0.5, u1, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u2, v2, l*(1.-c-b-f));
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 + 0.5, u1, v2, l*(1.-a-b-g));
+
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 + 0.5, u1, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 + 0.5, u2, v1, l*(1.-a-b-g));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5, u2, v2, l*(1.-a-d-h));
                     }
                     if !is_blocked(x,y,z-1,&chunks){
                         l = 0.8;
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u+uvsize, v, l);
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 - 0.5, u+uvsize, v+uvsize, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 - 0.5, u, v+uvsize, l);
+                        if ambien_occlusion {
+                            a = is_blocked(x +1 , y+1, z, &chunks) as u8 as f32 * ao_factor;
+                            b = is_blocked(x, y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            c = is_blocked(x-1 , y+1, z, &chunks) as u8 as f32* ao_factor;
+                            d = is_blocked(x, y+1, z-1, &chunks) as u8 as f32* ao_factor;
 
-                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u+uvsize, v, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 - 0.5, u, v+uvsize, l);
-                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 - 0.5, u, v, l);
+                            e = is_blocked(x -1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                            f = is_blocked(x -1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            g = is_blocked(x +1 , y+1, z+1, &chunks) as u8 as f32* ao_factor;
+                            h = is_blocked(x +1 , y+1, z-1, &chunks) as u8 as f32* ao_factor;
+                        }
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u2, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 + 0.5, z as f32 - 0.5, u2, v2, l*(1.-c-b-f));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 - 0.5, u1, v2, l*(1.-a-b-g));
+
+                        vertex(&mut self.buffer,x as f32 - 0.5, y as f32 - 0.5, z as f32 - 0.5, u2, v1, l*(1.-c-d-e));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 + 0.5, z as f32 - 0.5, u1, v2, l*(1.-a-b-g));
+                        vertex(&mut self.buffer,x as f32 + 0.5, y as f32 - 0.5, z as f32 - 0.5, u1, v1, l*(1.-a-d-h));
                     }
                 }
             }
