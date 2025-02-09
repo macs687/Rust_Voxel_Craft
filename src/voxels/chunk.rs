@@ -1,43 +1,48 @@
 use noise::{NoiseFn, OpenSimplex};
 use crate::voxels::voxel::Voxel;
+use crate::lighting::light_map::LightMap;
+
 
 pub const CHUNK_W: isize = 16; // X
 pub const CHUNK_H: isize = 16; // Y
 pub const CHUNK_D: isize = 16; // Z
 pub const CHUNK_VOL: usize = (CHUNK_W * CHUNK_H * CHUNK_D) as usize;
 
+
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    pub voxels: Box<[Voxel; CHUNK_VOL]>,
+    pub voxels: [Voxel; CHUNK_VOL],
     pub x: isize,
     pub y: isize,
     pub z: isize,
-    pub modified: bool
+    pub modified: bool,
+    pub light_map: LightMap
 }
 
 
 impl Chunk {
     pub fn new(x_pos: isize, y_pos: isize, z_pos: isize) -> Self {
-        let mut voxels = Box::new([Voxel { id: 0 }; CHUNK_VOL]);
+        let mut voxels = [Voxel {id: 0}; CHUNK_VOL];
         let perlin = OpenSimplex::new(1);
 
         for z in 0..CHUNK_D {
             for x in 0..CHUNK_W {
-                let _real_x = x + x_pos * CHUNK_W;
-                let _real_z = z + z_pos * CHUNK_D;
-                let height = perlin.get([(x as f64) * 0.05, (z as f64) * 0.05]);
+                let real_x = x + x_pos * CHUNK_W;
+                let real_z = z + z_pos * CHUNK_D;
+                //let height = perlin.get([(x as f64) * 0.05, (z as f64) * 0.05]);
                 for y in 0..CHUNK_H {
-                    let real_y = y + y_pos * CHUNK_H;
-                    let id = if (real_y as f32) <= ((height as f32) * 0.5 + 0.5 ) * 5.0  { 6 } else { 0 };
+                    let real_y = y + y_pos * CHUNK_H as isize;
+                    let id = perlin.get([(real_x as f64) * 0.0125, (real_y as f64) * 0.0125, (real_z as f64) * 0.0125]) > 0.1;
+                    let chunk_index = ((y * CHUNK_D + z) * CHUNK_W + x) as usize;
                     if real_y <= 2 {
-                        voxels[((y * CHUNK_D + z) * CHUNK_W + x) as usize].id = 2;
+                        voxels[chunk_index].id = 2;
                     } else {
-                        voxels[((y * CHUNK_D + z) * CHUNK_W + x) as usize].id = id;
+                        voxels[chunk_index].id = id as u8;
                     }
                 }
             }
         }
 
-        Chunk { voxels, x: x_pos, y: y_pos, z:z_pos, modified: true }
+        Chunk { voxels, x: x_pos, y: y_pos, z:z_pos, modified: true, light_map: LightMap::new() }
     }
 }

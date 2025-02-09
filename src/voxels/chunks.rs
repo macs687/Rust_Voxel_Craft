@@ -5,11 +5,11 @@ use super::Chunk;
 
 #[derive(Clone)]
 pub struct Chunks {
-    pub chunks: Vec<Box<Chunk>>,
+    pub chunks: Vec<Chunk>,
     pub volume: usize,
-    w: usize,
-    h: usize,
-    d: usize,
+    pub(crate) w: usize,
+    pub(crate) h: usize,
+    pub(crate) d: usize,
 }
 
 
@@ -22,7 +22,7 @@ impl Chunks {
             for z in 0..d {
                 for x in 0..w {
                     let chunk = Box::new(Chunk::new(x as isize, y as isize, z as isize));
-                    chunks.push(chunk);
+                    chunks.push(*chunk);
                 }
             }
         }
@@ -33,6 +33,29 @@ impl Chunks {
             w,
             h,
             d,
+        }
+    }
+
+
+    pub fn get_voxel<'a>(&self, x: isize, y: isize, z: isize) -> Option<&Voxel> {
+        match self.calculate_indices(x, y, z) {
+            Some((chunk_index, voxel_index, _, _, _, _, _, _)) => {
+                let chunk = self.chunks.get(chunk_index);
+                if let Some(chunk) = chunk {
+                    chunk.voxels.get(voxel_index)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
+    }
+
+
+    pub fn get_mut_chunk_by_voxel(&mut self, x: isize, y: isize, z: isize) -> Option<&mut Chunk> {
+        match self.calculate_indices(x, y, z) {
+            Some((chunk_index, _, _, _, _, _, _, _)) => self.chunks.get_mut(chunk_index),
+            None => None,
         }
     }
 
@@ -282,7 +305,7 @@ impl Chunks {
     pub fn write(&self, dest: &mut [u8]) {
         let mut index = 0;
         for chunk in &self.chunks {
-            for voxel in &*chunk.voxels {
+            for voxel in &chunk.voxels {
                 dest[index] = voxel.id;
                 index += 1;
             }
@@ -299,5 +322,53 @@ impl Chunks {
             }
             chunk.modified = true;
         }
+    }
+
+
+    pub fn get_light(&self, x: isize, y: isize, z: isize, channel: usize) -> u8 {
+        match self.calculate_indices(x, y, z) {
+            Some((chunk_index, _, _, _, _, lx, ly, lz)) => {
+                let chunk = &self.chunks[chunk_index];
+                chunk.light_map.get(lx as usize, ly as usize, lz as usize, channel)
+            }
+            None => 0,
+        }
+    }
+
+
+    fn calculate_indices(
+        &self,
+        x: isize,
+        y: isize,
+        z: isize
+    ) -> Option<(usize, usize, isize, isize, isize, isize, isize, isize)> {
+        let mut cx = x / (CHUNK_W as isize);
+        let mut cy = y / (CHUNK_H as isize);
+        let mut cz = z / (CHUNK_D as isize);
+        if x < 0 {
+            cx -= 1;
+        }
+        if y < 0 {
+            cy -= 1;
+        }
+        if z < 0 {
+            cz -= 1;
+        }
+        if
+        cx < 0 ||
+            cy < 0 ||
+            cz < 0 ||
+            cx >= (self.w as isize) ||
+            cy >= (self.h as isize) ||
+            cz >= (self.d as isize)
+        {
+            return None;
+        }
+        let chunk_index = ((cy * (self.d as isize) + cz) * (self.w as isize) + cx) as usize;
+        let lx = x - cx * (CHUNK_W as isize);
+        let ly = y - cy * (CHUNK_H as isize);
+        let lz = z - cz * (CHUNK_D as isize);
+        let voxel_index = ((ly * (CHUNK_D as isize) + lz) * (CHUNK_W as isize) + lx) as usize;
+        Some((chunk_index, voxel_index, cx, cy, cz, lx, ly, lz))
     }
 }

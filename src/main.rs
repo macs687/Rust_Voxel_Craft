@@ -7,6 +7,8 @@ use loaders::{load_texture};
 use voxels::{Chunk, Chunks, chunk::CHUNK_D, chunk::CHUNK_W, chunk::CHUNK_H, chunk::CHUNK_VOL};
 use graphics::mesh::Mesh;
 use files::{read_binary_file, write_binary_file};
+use lighting::{light_map, LightSolver};
+
 
 mod window;
 mod graphics;
@@ -15,6 +17,7 @@ mod voxels;
 mod settings;
 mod math;
 mod files;
+mod lighting;
 
 // const VERTICES: [f32; 30] = [
 //     -1.0f32, -1.0f32, 0.0f32, 0.0f32, 0.0f32,
@@ -49,27 +52,27 @@ fn main() {
 
     events.setting(&mut window);
 
-    let shader = load_shader("res/main.glslv","res/main.glslf").expect("Failed to load base shader");
+    let shader = load_shader("res/shaders/main.glslv","res/shaders/main.glslf").expect("Failed to load base shader");
 
-    let crosshair_shader = load_shader("res/crosshair.glslv","res/crosshair.glslf").expect("Failed to load crosshair shader");
+    let crosshair_shader = load_shader("res/shaders/crosshair.glslv","res/shaders/crosshair.glslf").expect("Failed to load crosshair shader");
 
-    let lines_shader = load_shader("res/lines.glslv", "res/lines.glslf").expect("Failed to load lines shader");
+    let lines_shader = load_shader("res/shaders/lines.glslv", "res/shaders/lines.glslf").expect("Failed to load lines shader");
 
-    let texture = load_texture("res/block.png").expect("Failed to load texture");
+    let texture = load_texture("res/textures/atlas.png").expect("Failed to load texture");
 
-    let mut chunks = Chunks::new(5, 1, 5);
+    let mut chunks = Chunks::new(16, 16, 16);
     let mut meshes = Vec::with_capacity(chunks.volume);
-    let mut renderer = VoxelRenderer::init(1024*1024*8);
+    let mut renderer = VoxelRenderer::new(1024*1024*8);
 
     let mut linebatch = LineBatch::init(4096);
 
     for i in 0..chunks.volume {
-        let mesh = renderer.render(&*chunks.chunks[i], &vec![], true);
+        let mesh = renderer.render(&chunks.chunks[i], &vec![]);
         meshes.push(mesh);
     }
 
 
-    window.clear_color(1.0, 1.0, 1.0, 1.0);
+    window.clear_color(0.0, 0.0, 0.0, 1.0);
 
     window.setting_gl();
 
@@ -85,7 +88,91 @@ fn main() {
     let mut cam_x = 0.0;
     let mut cam_y = 0.0;
 
-    let mut id = 2;
+
+    let mut choosen_block = 1;
+
+    let mut solver_r = LightSolver::new(0);
+    let mut solver_g = LightSolver::new(1);
+    let mut solver_b = LightSolver::new(2);
+    let mut solver_s = LightSolver::new(3);
+
+    let h = chunks.h;
+    let d = chunks.d;
+    let w = chunks.w;
+
+    for y in 0..h * CHUNK_H as usize {
+        for z in 0..d * CHUNK_D as usize {
+            for x in 0..w * CHUNK_W as usize {
+                let vox = chunks.get_voxel(x as isize, y as isize, z as isize);
+                if let Some(vox) = vox {
+                    if vox.id == 3 {
+                        solver_r.add(x as i32, y as i32, z as i32, Some(15), &mut chunks);
+                        solver_g.add(x as i32, y as i32, z as i32, Some(15), &mut chunks);
+                        solver_b.add(x as i32, y as i32, z as i32, Some(15), &mut chunks);
+                    }
+                }
+            }
+        }
+    }
+
+
+    for z in 0..d * CHUNK_D as usize {
+        for x in 0..w * CHUNK_W as usize {
+            for y in 0..h * CHUNK_H as usize {
+                let vox = chunks.get_voxel(x as isize, y as isize, z as isize);
+                if let Some(vox) = vox {
+                    if vox.id != 0 {
+                        break;
+                    }
+                    let voxel = chunks.get_mut_chunk_by_voxel(x as isize, y as isize, z as isize);
+                    if let Some(voxel) = voxel {
+                        voxel.light_map.set_s(x % CHUNK_W as usize, y % CHUNK_H as usize, z % CHUNK_D as usize, 0xf);
+                    }
+                }
+            }
+        }
+    }
+
+
+    for z in 0..d * CHUNK_D as usize {
+        for x in 0..w * CHUNK_W as usize {
+            for y in (0..=h * CHUNK_H as usize - 1).rev() {
+                let vox = chunks.get_voxel(x as isize, y as isize, z as isize);
+                if let Some(vox) = vox {
+                    if vox.id != 0 {
+                        break;
+                    }
+
+                    if
+                    chunks.get_light((x as isize) - 1, y as isize, z as isize, 3) == 0 ||
+                        chunks.get_light((x as isize) + 1, y as isize, z as isize, 3) == 0 ||
+                        chunks.get_light(x as isize, (y as isize) - 1, z as isize, 3) == 0 ||
+                        chunks.get_light(x as isize, (y as isize) + 1, z as isize, 3) == 0 ||
+                        chunks.get_light(x as isize, y as isize, (z as isize) - 1, 3) == 0 ||
+                        chunks.get_light(x as isize, y as isize, (z as isize) + 1, 3) == 0
+                    {
+                        solver_s.add(x as i32, y as i32, z as i32, None, &mut chunks);
+                    }
+                    if
+                    let Some(voxel) = chunks.get_mut_chunk_by_voxel(
+                        x as isize,
+                        y as isize,
+                        z as isize
+                    )
+                    {
+                        voxel.light_map.set_s(x % CHUNK_W as usize, y % CHUNK_H as usize, z % CHUNK_D as usize, 0xf);
+                    }
+                }
+            }
+        }
+    }
+
+
+    solver_r.solve(&mut chunks);
+    solver_g.solve(&mut chunks);
+    solver_b.solve(&mut chunks);
+    solver_s.solve(&mut chunks);
+
 
     while !window.should_close() {
         let current_time = window.glfw.get_time();
@@ -113,31 +200,31 @@ fn main() {
         }
 
         if events.jpressed(K_1){
-            id = 1;
+            choosen_block = 1;
         }
 
         if events.jpressed(K_2){
-            id = 2;
+            choosen_block = 2;
         }
 
         if events.jpressed(K_3){
-            id = 3;
+            choosen_block = 3;
         }
 
         if events.jpressed(K_4){
-            id = 4;
+            choosen_block = 4;
         }
 
         if events.jpressed(K_5){
-            id = 5;
+            choosen_block = 5;
         }
 
         if events.jpressed(K_6){
-            id = 6;
+            choosen_block = 6;
         }
 
         if events.jpressed(K_7){
-            id = 7;
+            choosen_block = 7;
         }
 
         if events.pressed(E){
@@ -167,13 +254,13 @@ fn main() {
         if events.jpressed(F1) {
             let mut buffer = vec![0u8; chunks.volume * CHUNK_VOL];
             chunks.write(&mut buffer);
-            let _result = write_binary_file("world.bin", &buffer);
+            let _result = write_binary_file("res/worlds/world.bin", &buffer);
             println!("world saved in {} bytes", chunks.volume * CHUNK_VOL);
         }
 
         if events.jpressed(F2) {
             let mut buffer = vec![0u8; chunks.volume * CHUNK_VOL];
-            let _result = read_binary_file("world.bin", &mut buffer);
+            let _result = read_binary_file("res/worlds/world.bin", &mut buffer);
             chunks.read(&buffer);
         }
 
@@ -211,16 +298,101 @@ fn main() {
             )
             {
                 linebatch.boxx(iend.x+0.5, iend.y+0.5, iend.z+0.5, 1.01, 1.01, 1.01, 1.0, 1.0, 1.0, 1.);
+
                 if events.jclicked(LCM) {
-                    chunks.set(iend.x as isize, iend.y as isize, iend.z as isize, 0);
+                    let x = iend.x as isize;
+                    let y = iend.y as isize;
+                    let z = iend.z as isize;
+
+                    chunks.set(x, y, z, 0);
+
+                    solver_r.remove(x, y, z, &mut chunks);
+                    solver_g.remove(x, y, z, &mut chunks);
+                    solver_b.remove(x, y, z, &mut chunks);
+
+                    solver_r.solve(&mut chunks);
+                    solver_g.solve(&mut chunks);
+                    solver_b.solve(&mut chunks);
+
+                    if chunks.get_light(x, y + 1, z, 3) == 0xf {
+                        for i in (0..=y).rev() {
+                            let voxel = chunks.get_voxel(x, i, z);
+                            if let Some(voxel) = voxel {
+                                if voxel.id != 0 {
+                                    break;
+                                }
+                                solver_s.add(x as i32, i as i32, z as i32, Some(0xf), &mut chunks);
+                            }
+                        }
+                    }
+
+                    let (x, y, z) = (x as i32, y as i32, z as i32);
+
+                    solver_r.add(x, y + 1, z, None, &mut chunks);
+                    solver_g.add(x, y + 1, z, None, &mut chunks);
+                    solver_b.add(x, y + 1, z, None, &mut chunks);
+                    solver_s.add(x, y + 1, z, None, &mut chunks);
+                    solver_r.add(x, y - 1, z, None, &mut chunks);
+                    solver_g.add(x, y - 1, z, None, &mut chunks);
+                    solver_b.add(x, y - 1, z, None, &mut chunks);
+                    solver_s.add(x, y - 1, z, None, &mut chunks);
+                    solver_r.add(x + 1, y, z, None, &mut chunks);
+                    solver_g.add(x + 1, y, z, None, &mut chunks);
+                    solver_b.add(x + 1, y, z, None, &mut chunks);
+                    solver_s.add(x + 1, y, z, None, &mut chunks);
+                    solver_r.add(x - 1, y, z, None, &mut chunks);
+                    solver_g.add(x - 1, y, z, None, &mut chunks);
+                    solver_b.add(x - 1, y, z, None, &mut chunks);
+                    solver_s.add(x - 1, y, z, None, &mut chunks);
+                    solver_r.add(x, y, z + 1, None, &mut chunks);
+                    solver_g.add(x, y, z + 1, None, &mut chunks);
+                    solver_b.add(x, y, z + 1, None, &mut chunks);
+                    solver_s.add(x, y, z + 1, None, &mut chunks);
+                    solver_r.add(x, y, z - 1, None, &mut chunks);
+                    solver_g.add(x, y, z - 1, None, &mut chunks);
+                    solver_b.add(x, y, z - 1, None, &mut chunks);
+                    solver_s.add(x, y, z - 1, None, &mut chunks);
+
+                    solver_r.solve(&mut chunks);
+                    solver_g.solve(&mut chunks);
+                    solver_b.solve(&mut chunks);
+                    solver_s.solve(&mut chunks);
                 }
+
                 if events.jclicked(PCM) {
-                    chunks.set(
-                        (iend.x + norm.x) as isize,
-                        (iend.y + norm.y) as isize,
-                        (iend.z + norm.z) as isize,
-                        id
-                    );
+                    let x = (iend.x + norm.x) as isize;
+                    let y = (iend.y + norm.y) as isize;
+                    let z = (iend.z + norm.z) as isize;
+                    chunks.set(x, y, z, choosen_block);
+
+                    solver_r.remove(x, y, z, &mut chunks);
+                    solver_g.remove(x, y, z, &mut chunks);
+                    solver_b.remove(x, y, z, &mut chunks);
+                    solver_s.remove(x, y, z, &mut chunks);
+
+                    for i in (0..=y - 1).rev() {
+                        solver_s.remove(x, i, z, &mut chunks);
+                        if let Some(voxel) = chunks.get_voxel(x, i - 1, z) {
+                            if i == 0 || voxel.id != 0 {
+                                break;
+                            }
+                        }
+                    }
+                    solver_r.solve(&mut chunks);
+                    solver_g.solve(&mut chunks);
+                    solver_b.solve(&mut chunks);
+                    solver_s.solve(&mut chunks);
+
+                    if choosen_block == 3 {
+                        let (x, y, z) = (x as i32, y as i32, z as i32);
+                        solver_r.add(x, y, z, Some(10), &mut chunks);
+                        solver_g.add(x, y, z, Some(10), &mut chunks);
+                        solver_b.add(x, y, z, Some(0), &mut chunks);
+
+                        solver_r.solve(&mut chunks);
+                        solver_g.solve(&mut chunks);
+                        solver_b.solve(&mut chunks);
+                    }
                 }
             }
         }
@@ -257,10 +429,10 @@ fn main() {
                 }
 
                 let index = ((oy + 1) * 3 + (oz + 1)) * 3 + (ox + 1);
-                closes[index as usize] = Some(*other.clone());
+                closes[index as usize] = Some(other.clone());
             }
 
-            let mesh = renderer.render(chunk.as_ref(), &closes, true);
+            let mesh = renderer.render(chunk, &closes);
             meshes[i] = mesh;
         }
 
