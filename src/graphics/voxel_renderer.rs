@@ -1,7 +1,7 @@
-use crate::voxels::Chunk;
+use crate::graphics::mesh::Mesh;
+use crate::voxels::{Blocks, Chunk};
 use crate::voxels::chunk::{CHUNK_D, CHUNK_H, CHUNK_W};
 use crate::voxels::voxel::Voxel;
-use super::mesh::Mesh;
 
 const VERTEX_SIZE: usize = 3 +2 + 4;
 
@@ -57,9 +57,30 @@ fn voxel(x: isize, y: isize, z: isize, chunks: &[Option<Chunk>]) -> Option<&Voxe
     }
 }
 
-fn is_blocked(x: isize, y: isize, z: isize, chunks: &[Option<Chunk>]) -> bool {
-    !is_chunk(x, y, z, chunks) || voxel(x, y, z, chunks).map_or(false, |voxel| voxel.id != 0)
+fn is_blocked(x: isize, y: isize, z: isize, blocks: &Blocks, group: u8, chunks: &[Option<Chunk>]) -> bool {
+    if !is_chunk(x, y, z, chunks) {
+        return true;
+    }
+
+    let voxel = voxel(x, y, z, chunks);
+    match voxel {
+        Some(voxel) => {
+            let block_id = voxel.id;
+            if block_id != 0 {
+                let local_block = blocks.blocks.get(block_id as usize);
+                if let Some(Some(local_block)) = local_block {
+                    local_block.draw_group == group
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+        None => false,
+    }
 }
+
 
 fn vertex(
     buffer: &mut Vec<f32>,
@@ -84,6 +105,15 @@ fn vertex(
     buffer.push(s);
 }
 
+fn setup_uv(index: usize, uvsize: f32) -> (f32, f32, f32, f32) {
+    let u1 = ((index % 16) as f32) * uvsize;
+    let v1 = 1.0 - ((1 + index / 16) as f32) * uvsize;
+    let u2 = u1 + uvsize;
+    let v2 = v1 + uvsize;
+    (u1, v1, u2, v2)
+
+}
+
 pub struct VoxelRenderer {
     buffer: Vec<f32>,
 }
@@ -99,6 +129,7 @@ impl VoxelRenderer {
         &mut self,
         chunk: &Chunk,
         chunks: &Vec<Option<Chunk>>,
+        blocks: &Blocks
     ) -> Mesh {
         self.buffer.clear();
 
@@ -112,233 +143,263 @@ impl VoxelRenderer {
                         continue;
                     }
 
-                    let uvsize = 1.0 / 16.0;
-                    let u1 = ((id % 16) as f32) * uvsize;
-                    let v1 = 1.0 - ((1 + id / 16) as f32) * uvsize;
-                    let u2 = u1 + uvsize;
-                    let v2 = v1 + uvsize;
 
                     let mut l;
-                    // AO values
+                    let uvsize = 1.0 / 16.0;
+
                     let (x, y, z) = (x as isize, y as isize, z as isize);
 
-                    if !is_blocked(x,y+1,z, &chunks){
-                        //l = 1.0_f32;
+                    let block = blocks.blocks.get(id as usize);
 
-                        let lr = light(x,y+1,z, 0, &chunks) as f32 / 15.0_f32;
-                        let lg = light(x,y+1,z, 1, &chunks) as f32 / 15.0_f32;
-                        let lb = light(x,y+1,z, 2, &chunks) as f32 / 15.0_f32;
-                        let ls = light(x,y+1,z, 3, &chunks) as f32 / 15.0_f32;
+                    if let Some(Some(block)) = block {
+                        let group = block.draw_group;
+                        if !is_blocked(x,y+1,z, &blocks, group, &chunks){
+                            //l = 1.0_f32;
 
-                        let lr0 = (light(x-1,y+1,z,0, &chunks) as f32 + lr*30_f32 + light(x-1,y+1,z-1,0, &chunks) as f32 + light(x,y+1,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr1 = (light(x-1,y+1,z,0, &chunks) as f32 + lr*30_f32 + light(x-1,y+1,z+1,0, &chunks) as f32 + light(x,y+1,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr2 = (light(x+1,y+1,z,0, &chunks) as f32 + lr*30_f32 + light(x+1,y+1,z+1,0, &chunks) as f32 + light(x,y+1,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr3 = (light(x+1,y+1,z,0, &chunks) as f32 + lr*30_f32 + light(x+1,y+1,z-1,0, &chunks) as f32 + light(x,y+1,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let (u1, v1, u2, v2) = setup_uv(block.texture_faces[3] as usize, uvsize);
 
-                        let lg0 = (light(x-1,y+1,z,1, &chunks) as f32 + lg*30_f32 + light(x-1,y+1,z-1,1, &chunks) as f32 + light(x,y+1,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg1 = (light(x-1,y+1,z,1, &chunks) as f32 + lg*30. + light(x-1,y+1,z+1,1, &chunks) as f32 + light(x,y+1,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg2 = (light(x+1,y+1,z,1, &chunks) as f32 + lg*30. + light(x+1,y+1,z+1,1, &chunks) as f32 + light(x,y+1,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg3 = (light(x+1,y+1,z,1, &chunks) as f32 + lg*30. + light(x+1,y+1,z-1,1, &chunks) as f32 + light(x,y+1,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr = light(x,y+1,z, 0, &chunks) as f32 / 15.0_f32;
+                            let lg = light(x,y+1,z, 1, &chunks) as f32 / 15.0_f32;
+                            let lb = light(x,y+1,z, 2, &chunks) as f32 / 15.0_f32;
+                            let ls = light(x,y+1,z, 3, &chunks) as f32 / 15.0_f32;
 
-                        let lb0 = (light(x-1,y+1,z,2, &chunks) as f32 + lb*30. + light(x-1,y+1,z-1,2, &chunks) as f32 + light(x,y+1,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb1 = (light(x-1,y+1,z,2, &chunks) as f32 + lb*30. + light(x-1,y+1,z+1,2, &chunks) as f32 + light(x,y+1,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb2 = (light(x+1,y+1,z,2, &chunks) as f32 + lb*30. + light(x+1,y+1,z+1,2, &chunks) as f32 + light(x,y+1,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb3 = (light(x+1,y+1,z,2, &chunks) as f32 + lb*30. + light(x+1,y+1,z-1,2, &chunks) as f32 + light(x,y+1,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr0 = (light(x-1,y+1,z,0, &chunks) as f32 + lr*30_f32 + light(x-1,y+1,z-1,0, &chunks) as f32 + light(x,y+1,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr1 = (light(x-1,y+1,z,0, &chunks) as f32 + lr*30_f32 + light(x-1,y+1,z+1,0, &chunks) as f32 + light(x,y+1,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr2 = (light(x+1,y+1,z,0, &chunks) as f32 + lr*30_f32 + light(x+1,y+1,z+1,0, &chunks) as f32 + light(x,y+1,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr3 = (light(x+1,y+1,z,0, &chunks) as f32 + lr*30_f32 + light(x+1,y+1,z-1,0, &chunks) as f32 + light(x,y+1,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        let ls0 = (light(x-1,y+1,z,3, &chunks) as f32 + ls*30. + light(x-1,y+1,z-1,3, &chunks) as f32 + light(x,y+1,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls1 = (light(x-1,y+1,z,3, &chunks) as f32 + ls*30. + light(x-1,y+1,z+1,3, &chunks) as f32 + light(x,y+1,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls2 = (light(x+1,y+1,z,3, &chunks) as f32 + ls*30. + light(x+1,y+1,z+1,3, &chunks) as f32 + light(x,y+1,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls3 = (light(x+1,y+1,z,3, &chunks) as f32 + ls*30. + light(x+1,y+1,z-1,3, &chunks) as f32 + light(x,y+1,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg0 = (light(x-1,y+1,z,1, &chunks) as f32 + lg*30_f32 + light(x-1,y+1,z-1,1, &chunks) as f32 + light(x,y+1,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg1 = (light(x-1,y+1,z,1, &chunks) as f32 + lg*30. + light(x-1,y+1,z+1,1, &chunks) as f32 + light(x,y+1,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg2 = (light(x+1,y+1,z,1, &chunks) as f32 + lg*30. + light(x+1,y+1,z+1,1, &chunks) as f32 + light(x,y+1,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg3 = (light(x+1,y+1,z,1, &chunks) as f32 + lg*30. + light(x+1,y+1,z-1,1, &chunks) as f32 + light(x,y+1,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u2,v1, lr0, lg0, lb0, ls0);
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1, lg1, lb1, ls1);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2, lg2, lb2, ls2);
+                            let lb0 = (light(x-1,y+1,z,2, &chunks) as f32 + lb*30. + light(x-1,y+1,z-1,2, &chunks) as f32 + light(x,y+1,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb1 = (light(x-1,y+1,z,2, &chunks) as f32 + lb*30. + light(x-1,y+1,z+1,2, &chunks) as f32 + light(x,y+1,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb2 = (light(x+1,y+1,z,2, &chunks) as f32 + lb*30. + light(x+1,y+1,z+1,2, &chunks) as f32 + light(x,y+1,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb3 = (light(x+1,y+1,z,2, &chunks) as f32 + lb*30. + light(x+1,y+1,z-1,2, &chunks) as f32 + light(x,y+1,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u2,v1, lr0, lg0, lb0, ls0);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2, lg2, lb2, ls2);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u1,v1, lr3, lg3, lb3, ls3);
-                    }
-                    if !is_blocked(x,y-1,z, &chunks){
-                        //l = 0.75_f32;
+                            let ls0 = (light(x-1,y+1,z,3, &chunks) as f32 + ls*30. + light(x-1,y+1,z-1,3, &chunks) as f32 + light(x,y+1,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls1 = (light(x-1,y+1,z,3, &chunks) as f32 + ls*30. + light(x-1,y+1,z+1,3, &chunks) as f32 + light(x,y+1,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls2 = (light(x+1,y+1,z,3, &chunks) as f32 + ls*30. + light(x+1,y+1,z+1,3, &chunks) as f32 + light(x,y+1,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls3 = (light(x+1,y+1,z,3, &chunks) as f32 + ls*30. + light(x+1,y+1,z-1,3, &chunks) as f32 + light(x,y+1,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        let lr = light(x,y-1,z, 0, &chunks) as f32 / 15.0_f32;
-                        let lg = light(x,y-1,z, 1, &chunks) as f32 / 15.0_f32;
-                        let lb = light(x,y-1,z, 2, &chunks) as f32 / 15.0_f32;
-                        let ls = light(x,y-1,z, 3, &chunks) as f32 / 15.0_f32;
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u2,v1, lr0, lg0, lb0, ls0);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1, lg1, lb1, ls1);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2, lg2, lb2, ls2);
 
-                        let lr0 = (light(x-1,y-1,z-1,0, &chunks) as f32 + lr*30. + light(x-1,y-1,z,0, &chunks) as f32 + light(x,y-1,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr1 = (light(x+1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x+1,y-1,z,0, &chunks) as f32 + light(x,y-1,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr2 = (light(x-1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x-1,y-1,z,0, &chunks) as f32 + light(x,y-1,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr3 = (light(x+1,y-1,z-1,0, &chunks) as f32 + lr*30. + light(x+1,y-1,z,0, &chunks) as f32 + light(x,y-1,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-
-                        let lg0 = (light(x-1,y-1,z-1,1, &chunks) as f32 + lg*30. + light(x-1,y-1,z,1, &chunks) as f32 + light(x,y-1,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg1 = (light(x+1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x+1,y-1,z,1, &chunks) as f32 + light(x,y-1,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg2 = (light(x-1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x-1,y-1,z,1, &chunks) as f32 + light(x,y-1,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg3 = (light(x+1,y-1,z-1,1, &chunks) as f32 + lg*30. + light(x+1,y-1,z,1, &chunks) as f32 + light(x,y-1,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-
-                        let lb0 = (light(x-1,y-1,z-1,2, &chunks) as f32 + lb*30. + light(x-1,y-1,z,2, &chunks) as f32 + light(x,y-1,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb1 = (light(x+1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x+1,y-1,z,2, &chunks) as f32 + light(x,y-1,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb2 = (light(x-1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x-1,y-1,z,2, &chunks) as f32 + light(x,y-1,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb3 = (light(x+1,y-1,z-1,2, &chunks) as f32 + lb*30. + light(x+1,y-1,z,2, &chunks) as f32 + light(x,y-1,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-
-                        let ls0 = (light(x-1,y-1,z-1,3, &chunks) as f32 + ls*30. + light(x-1,y-1,z,3, &chunks) as f32 + light(x,y-1,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls1 = (light(x+1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x+1,y-1,z,3, &chunks) as f32 + light(x,y-1,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls2 = (light(x-1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x-1,y-1,z,3, &chunks) as f32 + light(x,y-1,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls3 = (light(x+1,y-1,z-1,3, &chunks) as f32 + ls*30. + light(x+1,y-1,z,3, &chunks) as f32 + light(x,y-1,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
-
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr3,lg3,lb3,ls3);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u2,v1, lr0, lg0, lb0, ls0);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2, lg2, lb2, ls2);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u1,v1, lr3, lg3, lb3, ls3);
+                        }
                     }
 
-                    if !is_blocked(x+1,y,z, &chunks){
-                        //l = 0.95_f32;
+                    if let Some(Some(block)) = block {
+                        let group = block.draw_group;
+                        if !is_blocked(x,y-1,z, &blocks, group, &chunks){
+                            //l = 0.75_f32;
 
-                        let lr = light(x+1,y,z, 0, &chunks) as f32 / 15.0_f32;
-                        let lg = light(x+1,y,z, 1, &chunks) as f32 / 15.0_f32;
-                        let lb = light(x+1,y,z, 2, &chunks) as f32 / 15.0_f32;
-                        let ls = light(x+1,y,z, 3, &chunks) as f32 / 15.0_f32;
 
-                        let lr0 = (light(x+1,y-1,z-1,0, &chunks) as f32 + lr*30. + light(x+1,y,z-1,0, &chunks) as f32 + light(x+1,y-1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr1 = (light(x+1,y+1,z-1,0, &chunks) as f32 + lr*30. + light(x+1,y,z-1,0, &chunks) as f32 + light(x+1,y+1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr2 = (light(x+1,y+1,z+1,0, &chunks) as f32 + lr*30. + light(x+1,y,z+1,0, &chunks) as f32 + light(x+1,y+1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr3 = (light(x+1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x+1,y,z+1,0, &chunks) as f32 + light(x+1,y-1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let (u1, v1, u2, v2) = setup_uv(block.texture_faces[2] as usize, uvsize);
 
-                        let lg0 = (light(x+1,y-1,z-1,1, &chunks) as f32 + lg*30. + light(x+1,y,z-1,1, &chunks) as f32 + light(x+1,y-1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg1 = (light(x+1,y+1,z-1,1, &chunks) as f32 + lg*30. + light(x+1,y,z-1,1, &chunks) as f32 + light(x+1,y+1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg2 = (light(x+1,y+1,z+1,1, &chunks) as f32 + lg*30. + light(x+1,y,z+1,1, &chunks) as f32 + light(x+1,y+1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg3 = (light(x+1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x+1,y,z+1,1, &chunks) as f32 + light(x+1,y-1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr = light(x,y-1,z, 0, &chunks) as f32 / 15.0_f32;
+                            let lg = light(x,y-1,z, 1, &chunks) as f32 / 15.0_f32;
+                            let lb = light(x,y-1,z, 2, &chunks) as f32 / 15.0_f32;
+                            let ls = light(x,y-1,z, 3, &chunks) as f32 / 15.0_f32;
 
-                        let lb0 = (light(x+1,y-1,z-1,2, &chunks) as f32 + lb*30. + light(x+1,y,z-1,2, &chunks) as f32 + light(x+1,y-1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb1 = (light(x+1,y+1,z-1,2, &chunks) as f32 + lb*30. + light(x+1,y,z-1,2, &chunks) as f32 + light(x+1,y+1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb2 = (light(x+1,y+1,z+1,2, &chunks) as f32 + lb*30. + light(x+1,y,z+1,2, &chunks) as f32 + light(x+1,y+1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb3 = (light(x+1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x+1,y,z+1,2, &chunks) as f32 + light(x+1,y-1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr0 = (light(x-1,y-1,z-1,0, &chunks) as f32 + lr*30. + light(x-1,y-1,z,0, &chunks) as f32 + light(x,y-1,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr1 = (light(x+1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x+1,y-1,z,0, &chunks) as f32 + light(x,y-1,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr2 = (light(x-1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x-1,y-1,z,0, &chunks) as f32 + light(x,y-1,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr3 = (light(x+1,y-1,z-1,0, &chunks) as f32 + lr*30. + light(x+1,y-1,z,0, &chunks) as f32 + light(x,y-1,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        let ls0 = (light(x+1,y-1,z-1,3, &chunks) as f32 + ls*30. + light(x+1,y,z-1,3, &chunks) as f32 + light(x+1,y-1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls1 = (light(x+1,y+1,z-1,3, &chunks) as f32 + ls*30. + light(x+1,y,z-1,3, &chunks) as f32 + light(x+1,y+1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls2 = (light(x+1,y+1,z+1,3, &chunks) as f32 + ls*30. + light(x+1,y,z+1,3, &chunks) as f32 + light(x+1,y+1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls3 = (light(x+1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x+1,y,z+1,3, &chunks) as f32 + light(x+1,y-1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg0 = (light(x-1,y-1,z-1,1, &chunks) as f32 + lg*30. + light(x-1,y-1,z,1, &chunks) as f32 + light(x,y-1,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg1 = (light(x+1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x+1,y-1,z,1, &chunks) as f32 + light(x,y-1,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg2 = (light(x-1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x-1,y-1,z,1, &chunks) as f32 + light(x,y-1,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg3 = (light(x+1,y-1,z-1,1, &chunks) as f32 + lg*30. + light(x+1,y-1,z,1, &chunks) as f32 + light(x,y-1,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
+                            let lb0 = (light(x-1,y-1,z-1,2, &chunks) as f32 + lb*30. + light(x-1,y-1,z,2, &chunks) as f32 + light(x,y-1,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb1 = (light(x+1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x+1,y-1,z,2, &chunks) as f32 + light(x,y-1,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb2 = (light(x-1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x-1,y-1,z,2, &chunks) as f32 + light(x,y-1,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb3 = (light(x+1,y-1,z-1,2, &chunks) as f32 + lb*30. + light(x+1,y-1,z,2, &chunks) as f32 + light(x,y-1,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u1,v1, lr3,lg3,lb3,ls3);
-                    }
-                    if !is_blocked(x-1,y,z, &chunks){
-                        //l = 0.85_f32;
+                            let ls0 = (light(x-1,y-1,z-1,3, &chunks) as f32 + ls*30. + light(x-1,y-1,z,3, &chunks) as f32 + light(x,y-1,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls1 = (light(x+1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x+1,y-1,z,3, &chunks) as f32 + light(x,y-1,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls2 = (light(x-1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x-1,y-1,z,3, &chunks) as f32 + light(x,y-1,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls3 = (light(x+1,y-1,z-1,3, &chunks) as f32 + ls*30. + light(x+1,y-1,z,3, &chunks) as f32 + light(x,y-1,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        let lr = light(x-1,y,z, 0, &chunks) as f32 / 15.0_f32;
-                        let lg = light(x-1,y,z, 1, &chunks) as f32 / 15.0_f32;
-                        let lb = light(x-1,y,z, 2, &chunks) as f32 / 15.0_f32;
-                        let ls = light(x-1,y,z, 3, &chunks) as f32 / 15.0_f32;
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
 
-                        let lr0 = (light(x-1,y-1,z-1,0, &chunks) as f32 + lr*30. + light(x-1,y,z-1,0, &chunks) as f32 + light(x-1,y-1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr1 = (light(x-1,y+1,z+1,0, &chunks) as f32 + lr*30. + light(x-1,y,z+1,0, &chunks) as f32 + light(x-1,y+1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr2 = (light(x-1,y+1,z-1,0, &chunks) as f32 + lr*30. + light(x-1,y,z-1,0, &chunks) as f32 + light(x-1,y+1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr3 = (light(x-1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x-1,y,z+1,0, &chunks) as f32 + light(x-1,y-1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-
-                        let lg0 = (light(x-1,y-1,z-1,1, &chunks) as f32 + lg*30. + light(x-1,y,z-1,1, &chunks) as f32 + light(x-1,y-1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg1 = (light(x-1,y+1,z+1,1, &chunks) as f32 + lg*30. + light(x-1,y,z+1,1, &chunks) as f32 + light(x-1,y+1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg2 = (light(x-1,y+1,z-1,1, &chunks) as f32 + lg*30. + light(x-1,y,z-1,1, &chunks) as f32 + light(x-1,y+1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg3 = (light(x-1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x-1,y,z+1,1, &chunks) as f32 + light(x-1,y-1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-
-                        let lb0 = (light(x-1,y-1,z-1,2, &chunks) as f32 + lb*30. + light(x-1,y,z-1,2, &chunks) as f32 + light(x-1,y-1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb1 = (light(x-1,y+1,z+1,2, &chunks) as f32 + lb*30. + light(x-1,y,z+1,2, &chunks) as f32 + light(x-1,y+1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb2 = (light(x-1,y+1,z-1,2, &chunks) as f32 + lb*30. + light(x-1,y,z-1,2, &chunks) as f32 + light(x-1,y+1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb3 = (light(x-1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x-1,y,z+1,2, &chunks) as f32 + light(x-1,y-1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-
-                        let ls0 = (light(x-1,y-1,z-1,3, &chunks) as f32 + ls*30. + light(x-1,y,z-1,3, &chunks) as f32 + light(x-1,y-1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls1 = (light(x-1,y+1,z+1,3, &chunks) as f32 + ls*30. + light(x-1,y,z+1,3, &chunks) as f32 + light(x-1,y+1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls2 = (light(x-1,y+1,z-1,3, &chunks) as f32 + ls*30. + light(x-1,y,z-1,3, &chunks) as f32 + light(x-1,y+1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls3 = (light(x-1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x-1,y,z+1,3, &chunks) as f32 + light(x-1,y-1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
-
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u2,v1, lr3,lg3,lb3,ls3);
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr3,lg3,lb3,ls3);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                        }
                     }
 
-                    if !is_blocked(x,y,z+1, &chunks){
-                        l = 0.9_f32;
+                    if let Some(Some(block)) = block {
+                        let group = block.draw_group;
+                        if !is_blocked(x+1,y,z, &blocks, group,&chunks){
+                            //l = 0.95_f32;
 
-                        let lr = light(x,y,z+1, 0, &chunks) as f32 / 15.0_f32;
-                        let lg = light(x,y,z+1, 1, &chunks) as f32 / 15.0_f32;
-                        let lb = light(x,y,z+1, 2, &chunks) as f32 / 15.0_f32;
-                        let ls = light(x,y,z+1, 3, &chunks) as f32 / 15.0_f32;
+                            let (u1, v1, u2, v2) = setup_uv(block.texture_faces[1] as usize, uvsize);
 
-                        let lr0 = l*(light(x-1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x,y-1,z+1,0, &chunks) as f32 + light(x-1,y,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr1 = l*(light(x+1,y+1,z+1,0, &chunks) as f32 + lr*30. + light(x,y+1,z+1,0, &chunks) as f32 + light(x+1,y,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr2 = l*(light(x-1,y+1,z+1,0, &chunks) as f32 + lr*30. + light(x,y+1,z+1,0, &chunks) as f32 + light(x-1,y,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr3 = l*(light(x+1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x,y-1,z+1,0, &chunks) as f32 + light(x+1,y,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr = light(x+1,y,z, 0, &chunks) as f32 / 15.0_f32;
+                            let lg = light(x+1,y,z, 1, &chunks) as f32 / 15.0_f32;
+                            let lb = light(x+1,y,z, 2, &chunks) as f32 / 15.0_f32;
+                            let ls = light(x+1,y,z, 3, &chunks) as f32 / 15.0_f32;
 
-                        let lg0 = l*(light(x-1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x,y-1,z+1,1, &chunks) as f32 + light(x-1,y,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg1 = l*(light(x+1,y+1,z+1,1, &chunks) as f32 + lg*30. + light(x,y+1,z+1,1, &chunks) as f32 + light(x+1,y,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg2 = l*(light(x-1,y+1,z+1,1, &chunks) as f32 + lg*30. + light(x,y+1,z+1,1, &chunks) as f32 + light(x-1,y,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg3 = l*(light(x+1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x,y-1,z+1,1, &chunks) as f32 + light(x+1,y,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr0 = (light(x+1,y-1,z-1,0, &chunks) as f32 + lr*30. + light(x+1,y,z-1,0, &chunks) as f32 + light(x+1,y-1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr1 = (light(x+1,y+1,z-1,0, &chunks) as f32 + lr*30. + light(x+1,y,z-1,0, &chunks) as f32 + light(x+1,y+1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr2 = (light(x+1,y+1,z+1,0, &chunks) as f32 + lr*30. + light(x+1,y,z+1,0, &chunks) as f32 + light(x+1,y+1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr3 = (light(x+1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x+1,y,z+1,0, &chunks) as f32 + light(x+1,y-1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        let lb0 = l*(light(x-1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x,y-1,z+1,2, &chunks) as f32 + light(x-1,y,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb1 = l*(light(x+1,y+1,z+1,2, &chunks) as f32 + lb*30. + light(x,y+1,z+1,2, &chunks) as f32 + light(x+1,y,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb2 = l*(light(x-1,y+1,z+1,2, &chunks) as f32 + lb*30. + light(x,y+1,z+1,2, &chunks) as f32 + light(x-1,y,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb3 = l*(light(x+1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x,y-1,z+1,2, &chunks) as f32 + light(x+1,y,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg0 = (light(x+1,y-1,z-1,1, &chunks) as f32 + lg*30. + light(x+1,y,z-1,1, &chunks) as f32 + light(x+1,y-1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg1 = (light(x+1,y+1,z-1,1, &chunks) as f32 + lg*30. + light(x+1,y,z-1,1, &chunks) as f32 + light(x+1,y+1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg2 = (light(x+1,y+1,z+1,1, &chunks) as f32 + lg*30. + light(x+1,y,z+1,1, &chunks) as f32 + light(x+1,y+1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg3 = (light(x+1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x+1,y,z+1,1, &chunks) as f32 + light(x+1,y-1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        let ls0 = l*(light(x-1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x,y-1,z+1,3, &chunks) as f32 + light(x-1,y,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls1 = l*(light(x+1,y+1,z+1,3, &chunks) as f32 + ls*30. + light(x,y+1,z+1,3, &chunks) as f32 + light(x+1,y,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls2 = l*(light(x-1,y+1,z+1,3, &chunks) as f32 + ls*30. + light(x,y+1,z+1,3, &chunks) as f32 + light(x-1,y,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls3 = l*(light(x+1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x,y-1,z+1,3, &chunks) as f32 + light(x+1,y,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb0 = (light(x+1,y-1,z-1,2, &chunks) as f32 + lb*30. + light(x+1,y,z-1,2, &chunks) as f32 + light(x+1,y-1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb1 = (light(x+1,y+1,z-1,2, &chunks) as f32 + lb*30. + light(x+1,y,z-1,2, &chunks) as f32 + light(x+1,y+1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb2 = (light(x+1,y+1,z+1,2, &chunks) as f32 + lb*30. + light(x+1,y,z+1,2, &chunks) as f32 + light(x+1,y+1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb3 = (light(x+1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x+1,y,z+1,2, &chunks) as f32 + light(x+1,y-1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
+                            let ls0 = (light(x+1,y-1,z-1,3, &chunks) as f32 + ls*30. + light(x+1,y,z-1,3, &chunks) as f32 + light(x+1,y-1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls1 = (light(x+1,y+1,z-1,3, &chunks) as f32 + ls*30. + light(x+1,y,z-1,3, &chunks) as f32 + light(x+1,y+1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls2 = (light(x+1,y+1,z+1,3, &chunks) as f32 + ls*30. + light(x+1,y,z+1,3, &chunks) as f32 + light(x+1,y+1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls3 = (light(x+1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x+1,y,z+1,3, &chunks) as f32 + light(x+1,y-1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u2,v1, lr3,lg3,lb3,ls3);
-                        vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
+
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u1,v1, lr3,lg3,lb3,ls3);
+                        }
                     }
-                    if !is_blocked(x,y,z-1, &chunks){
-                        l = 0.8_f32;
+                    if let Some(Some(block)) = block {
+                        let group = block.draw_group;
+                        if !is_blocked(x-1,y,z, &blocks, group,&chunks){
+                            //l = 0.85_f32;
 
-                        let lr = light(x,y,z-1, 0, &chunks) as f32 / 15.0_f32;
-                        let lg = light(x,y,z-1, 1, &chunks) as f32 / 15.0_f32;
-                        let lb = light(x,y,z-1, 2, &chunks) as f32 / 15.0_f32;
-                        let ls = light(x,y,z-1, 3, &chunks) as f32 / 15.0_f32;
+                            let (u1, v1, u2, v2) = setup_uv(block.texture_faces[0] as usize, uvsize);
 
-                        let lr0 = l*(light(x-1,y-1,z-1,0, &chunks) as f32 + lr*30_f32 + light(x,y-1,z-1,0, &chunks) as f32 + light(x-1,y,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr1 = l*(light(x-1,y+1,z-1,0, &chunks) as f32 + lr*30_f32 + light(x,y+1,z-1,0, &chunks) as f32 + light(x-1,y,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr2 = l*(light(x+1,y+1,z-1,0, &chunks) as f32 + lr*30_f32 + light(x,y+1,z-1,0, &chunks) as f32 + light(x+1,y,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lr3 = l*(light(x+1,y-1,z-1,0, &chunks) as f32 + lr*30_f32 + light(x,y-1,z-1,0, &chunks) as f32 + light(x+1,y,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr = light(x-1,y,z, 0, &chunks) as f32 / 15.0_f32;
+                            let lg = light(x-1,y,z, 1, &chunks) as f32 / 15.0_f32;
+                            let lb = light(x-1,y,z, 2, &chunks) as f32 / 15.0_f32;
+                            let ls = light(x-1,y,z, 3, &chunks) as f32 / 15.0_f32;
 
-                        let lg0 = l*(light(x-1,y-1,z-1,1, &chunks) as f32 + lg*30_f32 + light(x,y-1,z-1,1, &chunks) as f32 + light(x-1,y,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg1 = l*(light(x-1,y+1,z-1,1, &chunks) as f32 + lg*30_f32 + light(x,y+1,z-1,1, &chunks) as f32 + light(x-1,y,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg2 = l*(light(x+1,y+1,z-1,1, &chunks) as f32 + lg*30_f32 + light(x,y+1,z-1,1, &chunks) as f32 + light(x+1,y,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lg3 = l*(light(x+1,y-1,z-1,1, &chunks) as f32 + lg*30_f32 + light(x,y-1,z-1,1, &chunks) as f32 + light(x+1,y,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr0 = (light(x-1,y-1,z-1,0, &chunks) as f32 + lr*30. + light(x-1,y,z-1,0, &chunks) as f32 + light(x-1,y-1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr1 = (light(x-1,y+1,z+1,0, &chunks) as f32 + lr*30. + light(x-1,y,z+1,0, &chunks) as f32 + light(x-1,y+1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr2 = (light(x-1,y+1,z-1,0, &chunks) as f32 + lr*30. + light(x-1,y,z-1,0, &chunks) as f32 + light(x-1,y+1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr3 = (light(x-1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x-1,y,z+1,0, &chunks) as f32 + light(x-1,y-1,z,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        let lb0 = l*(light(x-1,y-1,z-1,2, &chunks) as f32 + lb*30_f32 + light(x,y-1,z-1,2, &chunks) as f32 + light(x-1,y,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb1 = l*(light(x-1,y+1,z-1,2, &chunks) as f32 + lb*30_f32 + light(x,y+1,z-1,2, &chunks) as f32 + light(x-1,y,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb2 = l*(light(x+1,y+1,z-1,2, &chunks) as f32 + lb*30_f32 + light(x,y+1,z-1,2, &chunks) as f32 + light(x+1,y,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let lb3 = l*(light(x+1,y-1,z-1,2, &chunks) as f32 + lb*30_f32 + light(x,y-1,z-1,2, &chunks) as f32 + light(x+1,y,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg0 = (light(x-1,y-1,z-1,1, &chunks) as f32 + lg*30. + light(x-1,y,z-1,1, &chunks) as f32 + light(x-1,y-1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg1 = (light(x-1,y+1,z+1,1, &chunks) as f32 + lg*30. + light(x-1,y,z+1,1, &chunks) as f32 + light(x-1,y+1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg2 = (light(x-1,y+1,z-1,1, &chunks) as f32 + lg*30. + light(x-1,y,z-1,1, &chunks) as f32 + light(x-1,y+1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg3 = (light(x-1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x-1,y,z+1,1, &chunks) as f32 + light(x-1,y-1,z,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        let ls0 = l*(light(x-1,y-1,z-1,3, &chunks) as f32 + ls*30_f32 + light(x,y-1,z-1,3, &chunks) as f32 + light(x-1,y,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls1 = l*(light(x-1,y+1,z-1,3, &chunks) as f32 + ls*30_f32 + light(x,y+1,z-1,3, &chunks) as f32 + light(x-1,y,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls2 = l*(light(x+1,y+1,z-1,3, &chunks) as f32 + ls*30_f32 + light(x,y+1,z-1,3, &chunks) as f32 + light(x+1,y,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
-                        let ls3 = l*(light(x+1,y-1,z-1,3, &chunks) as f32 + ls*30_f32  + light(x,y-1,z-1,3, &chunks) as f32 + light(x+1,y,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb0 = (light(x-1,y-1,z-1,2, &chunks) as f32 + lb*30. + light(x-1,y,z-1,2, &chunks) as f32 + light(x-1,y-1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb1 = (light(x-1,y+1,z+1,2, &chunks) as f32 + lb*30. + light(x-1,y,z+1,2, &chunks) as f32 + light(x-1,y+1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb2 = (light(x-1,y+1,z-1,2, &chunks) as f32 + lb*30. + light(x-1,y,z-1,2, &chunks) as f32 + light(x-1,y+1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb3 = (light(x-1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x-1,y,z+1,2, &chunks) as f32 + light(x-1,y-1,z,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        vertex(&mut self.buffer, x as f32 -0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32 -0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
-                        vertex(&mut self.buffer, x as f32 +0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
+                            let ls0 = (light(x-1,y-1,z-1,3, &chunks) as f32 + ls*30. + light(x-1,y,z-1,3, &chunks) as f32 + light(x-1,y-1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls1 = (light(x-1,y+1,z+1,3, &chunks) as f32 + ls*30. + light(x-1,y,z+1,3, &chunks) as f32 + light(x-1,y+1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls2 = (light(x-1,y+1,z-1,3, &chunks) as f32 + ls*30. + light(x-1,y,z-1,3, &chunks) as f32 + light(x-1,y+1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls3 = (light(x-1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x-1,y,z+1,3, &chunks) as f32 + light(x-1,y-1,z,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
 
-                        vertex(&mut self.buffer, x as f32 -0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr0,lg0,lb0,ls0);
-                        vertex(&mut self.buffer, x as f32 +0.5_f32, y as f32 +0.5_f32, z as f32-0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
-                        vertex(&mut self.buffer, x as f32 +0.5_f32, y as f32 -0.5_f32, z as f32-0.5_f32, u1,v1, lr3,lg3,lb3,ls3);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
+
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u2,v1, lr3,lg3,lb3,ls3);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                        }
+                    }
+
+                    if let Some(Some(block)) = block {
+                        let group = block.draw_group;
+                        if !is_blocked(x,y,z+1, &blocks, group,&chunks){
+                            l = 0.9_f32;
+
+                            let (u1, v1, u2, v2) = setup_uv(block.texture_faces[5] as usize, uvsize);
+
+                            let lr = light(x,y,z+1, 0, &chunks) as f32 / 15.0_f32;
+                            let lg = light(x,y,z+1, 1, &chunks) as f32 / 15.0_f32;
+                            let lb = light(x,y,z+1, 2, &chunks) as f32 / 15.0_f32;
+                            let ls = light(x,y,z+1, 3, &chunks) as f32 / 15.0_f32;
+
+                            let lr0 = l*(light(x-1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x,y-1,z+1,0, &chunks) as f32 + light(x-1,y,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr1 = l*(light(x+1,y+1,z+1,0, &chunks) as f32 + lr*30. + light(x,y+1,z+1,0, &chunks) as f32 + light(x+1,y,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr2 = l*(light(x-1,y+1,z+1,0, &chunks) as f32 + lr*30. + light(x,y+1,z+1,0, &chunks) as f32 + light(x-1,y,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr3 = l*(light(x+1,y-1,z+1,0, &chunks) as f32 + lr*30. + light(x,y-1,z+1,0, &chunks) as f32 + light(x+1,y,z+1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+
+                            let lg0 = l*(light(x-1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x,y-1,z+1,1, &chunks) as f32 + light(x-1,y,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg1 = l*(light(x+1,y+1,z+1,1, &chunks) as f32 + lg*30. + light(x,y+1,z+1,1, &chunks) as f32 + light(x+1,y,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg2 = l*(light(x-1,y+1,z+1,1, &chunks) as f32 + lg*30. + light(x,y+1,z+1,1, &chunks) as f32 + light(x-1,y,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg3 = l*(light(x+1,y-1,z+1,1, &chunks) as f32 + lg*30. + light(x,y-1,z+1,1, &chunks) as f32 + light(x+1,y,z+1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+
+                            let lb0 = l*(light(x-1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x,y-1,z+1,2, &chunks) as f32 + light(x-1,y,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb1 = l*(light(x+1,y+1,z+1,2, &chunks) as f32 + lb*30. + light(x,y+1,z+1,2, &chunks) as f32 + light(x+1,y,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb2 = l*(light(x-1,y+1,z+1,2, &chunks) as f32 + lb*30. + light(x,y+1,z+1,2, &chunks) as f32 + light(x-1,y,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb3 = l*(light(x+1,y-1,z+1,2, &chunks) as f32 + lb*30. + light(x,y-1,z+1,2, &chunks) as f32 + light(x+1,y,z+1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+
+                            let ls0 = l*(light(x-1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x,y-1,z+1,3, &chunks) as f32 + light(x-1,y,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls1 = l*(light(x+1,y+1,z+1,3, &chunks) as f32 + ls*30. + light(x,y+1,z+1,3, &chunks) as f32 + light(x+1,y,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls2 = l*(light(x-1,y+1,z+1,3, &chunks) as f32 + ls*30. + light(x,y+1,z+1,3, &chunks) as f32 + light(x-1,y,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls3 = l*(light(x+1,y-1,z+1,3, &chunks) as f32 + ls*30. + light(x,y-1,z+1,3, &chunks) as f32 + light(x+1,y,z+1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
+
+                            vertex(&mut self.buffer, x as f32-0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u1,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32-0.5_f32, z as f32+0.5_f32, u2,v1, lr3,lg3,lb3,ls3);
+                            vertex(&mut self.buffer, x as f32+0.5_f32, y as f32+0.5_f32, z as f32+0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                        }
+                    }
+                    if let Some(Some(block)) = block {
+                        let group = block.draw_group;
+                        if !is_blocked(x,y,z-1, &blocks, group,&chunks){
+                            l = 0.8_f32;
+
+                            let (u1, v1, u2, v2) = setup_uv(block.texture_faces[4] as usize, uvsize);
+
+                            let lr = light(x,y,z-1, 0, &chunks) as f32 / 15.0_f32;
+                            let lg = light(x,y,z-1, 1, &chunks) as f32 / 15.0_f32;
+                            let lb = light(x,y,z-1, 2, &chunks) as f32 / 15.0_f32;
+                            let ls = light(x,y,z-1, 3, &chunks) as f32 / 15.0_f32;
+
+                            let lr0 = l*(light(x-1,y-1,z-1,0, &chunks) as f32 + lr*30_f32 + light(x,y-1,z-1,0, &chunks) as f32 + light(x-1,y,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr1 = l*(light(x-1,y+1,z-1,0, &chunks) as f32 + lr*30_f32 + light(x,y+1,z-1,0, &chunks) as f32 + light(x-1,y,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr2 = l*(light(x+1,y+1,z-1,0, &chunks) as f32 + lr*30_f32 + light(x,y+1,z-1,0, &chunks) as f32 + light(x+1,y,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lr3 = l*(light(x+1,y-1,z-1,0, &chunks) as f32 + lr*30_f32 + light(x,y-1,z-1,0, &chunks) as f32 + light(x+1,y,z-1,0, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+
+                            let lg0 = l*(light(x-1,y-1,z-1,1, &chunks) as f32 + lg*30_f32 + light(x,y-1,z-1,1, &chunks) as f32 + light(x-1,y,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg1 = l*(light(x-1,y+1,z-1,1, &chunks) as f32 + lg*30_f32 + light(x,y+1,z-1,1, &chunks) as f32 + light(x-1,y,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg2 = l*(light(x+1,y+1,z-1,1, &chunks) as f32 + lg*30_f32 + light(x,y+1,z-1,1, &chunks) as f32 + light(x+1,y,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lg3 = l*(light(x+1,y-1,z-1,1, &chunks) as f32 + lg*30_f32 + light(x,y-1,z-1,1, &chunks) as f32 + light(x+1,y,z-1,1, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+
+                            let lb0 = l*(light(x-1,y-1,z-1,2, &chunks) as f32 + lb*30_f32 + light(x,y-1,z-1,2, &chunks) as f32 + light(x-1,y,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb1 = l*(light(x-1,y+1,z-1,2, &chunks) as f32 + lb*30_f32 + light(x,y+1,z-1,2, &chunks) as f32 + light(x-1,y,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb2 = l*(light(x+1,y+1,z-1,2, &chunks) as f32 + lb*30_f32 + light(x,y+1,z-1,2, &chunks) as f32 + light(x+1,y,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let lb3 = l*(light(x+1,y-1,z-1,2, &chunks) as f32 + lb*30_f32 + light(x,y-1,z-1,2, &chunks) as f32 + light(x+1,y,z-1,2, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+
+                            let ls0 = l*(light(x-1,y-1,z-1,3, &chunks) as f32 + ls*30_f32 + light(x,y-1,z-1,3, &chunks) as f32 + light(x-1,y,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls1 = l*(light(x-1,y+1,z-1,3, &chunks) as f32 + ls*30_f32 + light(x,y+1,z-1,3, &chunks) as f32 + light(x-1,y,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls2 = l*(light(x+1,y+1,z-1,3, &chunks) as f32 + ls*30_f32 + light(x,y+1,z-1,3, &chunks) as f32 + light(x+1,y,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+                            let ls3 = l*(light(x+1,y-1,z-1,3, &chunks) as f32 + ls*30_f32  + light(x,y-1,z-1,3, &chunks) as f32 + light(x+1,y,z-1,3, &chunks) as f32) / 5.0_f32 / 15.0_f32;
+
+                            vertex(&mut self.buffer, x as f32 -0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32 -0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u2,v2, lr1,lg1,lb1,ls1);
+                            vertex(&mut self.buffer, x as f32 +0.5_f32, y as f32+0.5_f32, z as f32-0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
+
+                            vertex(&mut self.buffer, x as f32 -0.5_f32, y as f32-0.5_f32, z as f32-0.5_f32, u2,v1, lr0,lg0,lb0,ls0);
+                            vertex(&mut self.buffer, x as f32 +0.5_f32, y as f32 +0.5_f32, z as f32-0.5_f32, u1,v2, lr2,lg2,lb2,ls2);
+                            vertex(&mut self.buffer, x as f32 +0.5_f32, y as f32 -0.5_f32, z as f32-0.5_f32, u1,v1, lr3,lg3,lb3,ls3);
+                        }
                     }
                 }
             }

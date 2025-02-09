@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use crate::voxels::{chunk::{CHUNK_D, CHUNK_H, CHUNK_W}, chunks::Chunks };
+use crate::voxels::{chunk::{CHUNK_D, CHUNK_H, CHUNK_W}, chunks::Chunks, Blocks};
 
 #[derive(Clone, Copy)]
 struct LightEntry {
@@ -97,7 +97,7 @@ impl LightSolver {
         }
     }
 
-    pub fn solve(&mut self, chunks: &mut Chunks) {
+    pub fn solve(&mut self, blocks: &Blocks, chunks: &mut Chunks) {
         let coords = [0, 0, 1, 0, 0, -1, 0, 1, 0, 0, -1, 0, 1, 0, 0, -1, 0, 0];
 
         while let Some(entry) = self.rem_queue.pop_front() {
@@ -160,22 +160,24 @@ impl LightSolver {
                 )
                 {
                     if let Some(v) = v {
-                        if v.id == 0 && light + 2 <= entry.light {
-                            chunk.light_map.set(
-                                (x as usize) - (chunk.x as usize) * CHUNK_W as usize,
-                                (y as usize) - (chunk.y as usize) * CHUNK_H as usize,
-                                (z as usize) - (chunk.z as usize) * CHUNK_D as usize,
-                                self.channel as usize,
-                                entry.light - 1
-                            );
-                            chunk.modified = true;
-                            let nentry = LightEntry {
-                                x,
-                                y,
-                                z,
-                                light: entry.light - 1,
-                            };
-                            self.add_queue.push_back(nentry);
+                        if let Some(block) = blocks.get(v.id){
+                            if block.light_passing && light + 2 <= entry.light {
+                                chunk.light_map.set(
+                                    (x as usize) - (chunk.x as usize) * CHUNK_W as usize,
+                                    (y as usize) - (chunk.y as usize) * CHUNK_H as usize,
+                                    (z as usize) - (chunk.z as usize) * CHUNK_D as usize,
+                                    self.channel as usize,
+                                    entry.light - 1
+                                );
+                                chunk.modified = true;
+                                let nentry = LightEntry {
+                                    x,
+                                    y,
+                                    z,
+                                    light: entry.light - 1,
+                                };
+                                self.add_queue.push_back(nentry);
+                            }
                         }
                     }
                 }

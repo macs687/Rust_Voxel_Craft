@@ -2,7 +2,7 @@ use crate::voxels::chunk::{CHUNK_D, CHUNK_VOL, CHUNK_W};
 
 #[derive(Debug, Clone)]
 pub struct LightMap {
-    map: Vec<u16>,
+    pub(crate) map: Vec<u16>,
 }
 
 impl LightMap {
